@@ -7,8 +7,8 @@
 - `[x]` done  -  `[~]` in progress  -  `[ ]` not started
 
 ## Current status
-Scaffolding and dependencies are complete. Now implementing the core source files in build order.
-Currently working on `src/types.ts`.
+Scaffolding and dependencies are complete. `src/types.ts` and `src/config.ts` are done. Next up:
+`src/connector/mockConnector.ts` (the first `LightConnector` implementation).
 
 ## Build checklist (in build order)
 - [x] Project scaffolding - `package.json` (type: module, scripts), `tsconfig.json`, `.gitignore`, `.env` / `.env.example`
@@ -16,8 +16,8 @@ Currently working on `src/types.ts`.
 - [x] `CLAUDE.md` - agent guidance
 - [x] `PLAN.md` + `PROGRESS.md` - documentation
 - [x] Source skeleton - all `src/**/*.ts` created with TODO headers
-- [~] `src/types.ts` - `Power`, `LightState`, `DeviceInfo` done; `LightConnector`, `TaskAction`, `TaskStatus`, `ScheduledTask` remaining
-- [ ] `src/config.ts` - env + `loadLights()` / `saveLights()`
+- [x] `src/types.ts` - `Power`, `LightState`, `DeviceInfo`, `LightConnector`, `TaskAction`, `TaskStatus`, `ScheduledTask`
+- [x] `src/config.ts` - env + `loadLights()` / `saveLights()`
 - [ ] `src/connector/mockConnector.ts` - in-memory connector
 - [ ] `src/scheduler.ts` - TaskScheduler loop engine
 - [ ] `src/agent/tools.ts` - Anthropic tool schemas
@@ -32,13 +32,19 @@ Currently working on `src/types.ts`.
 ## Open decisions / notes
 - `DeviceInfo.host` is currently optional (`host?`). `KasaConnector` needs a host to reach a bulb, so
   it must be present for real hardware - either enforce it there or make `host` required later.
-- Default `CLAUDE_MODEL` not yet pinned in `config.ts`.
+- Each `TaskAction` variant carries its own `id`, which duplicates `ScheduledTask.lightId`. Pick one
+  source of truth when writing the scheduler (either is fine).
+- `ScheduledTask.lastRun` is a `Date` (not an ISO string). Fine in memory; convert if we ever persist
+  tasks to JSON.
 
 ## Changelog
 Newest first. Note what changed and, once pushed, the commit.
 
 ### 2026-07-04
-- Implemented `Power`, `LightState`, `DeviceInfo` in `src/types.ts`. (in progress)
+- Pinned TypeScript to 5.9.3 (was 6.0.3) so CLI `tsc` resolves `@types/node`; aligns typecheck with the editor and the root project.
+- Implemented `src/config.ts`: `.env` loading via `process.loadEnvFile()`, `ANTHROPIC_API_KEY` / `CLAUDE_MODEL` / `CONNECTOR` exports, and `loadLights()` / `saveLights()` for `lights.json` (fixed a missing `join` import).
+- Completed `src/types.ts`: added `LightConnector`, `TaskAction`, `TaskStatus`, `ScheduledTask`.
+- Implemented `Power`, `LightState`, `DeviceInfo` in `src/types.ts`.
 - Added `PLAN.md` (full design) and `PROGRESS.md` (this tracker).
 - Fixed a JSDoc bug in `src/agent/lightAgent.ts`: a stray `*/` inside a comment closed it early and
   produced a TS2363 arithmetic error. Verified with `tsc --noEmit`.
@@ -52,4 +58,4 @@ Track git pushes here so contributors can map docs to commits.
 
 | Date | Commit | Branch | Summary |
 |------|--------|--------|---------|
-| -    | -      | -      | Nothing pushed yet |
+| 2026-07-04 | a673f49 | main | Initial commit: full project scaffolding + `src/` |

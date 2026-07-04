@@ -26,11 +26,43 @@ export interface LightState {
     saturation?: number; //0-100
 }
 
-// Device info
+// Device info (saved in lights.json)
 export interface DeviceInfo {
     id: string; // eg: "living-room-light"
     alias?: string; // original name of the light
     host?: string; // ip address of the light
     model?: string; // model of the light
     mac?: string; // mac address of the light
+}
+
+// Connector interface (light must implement it)
+export interface LightConnector {
+    listLights(): Promise<DeviceInfo[]>;
+    getState(id: string): Promise<LightState>;
+    setPower(id: string, power: Power): Promise<void>;
+    setBrightness(id: string, brightness: number): Promise<void>;
+    setColor(id: string, hue: number, saturation: number): Promise<void>;
+}
+
+// --loop engine --
+
+export type TaskAction = 
+    | { type:"setPower", id: string, power: Power }
+    | { type:"setBrightness", id: string, brightness: number }
+    | { type:"setColor", id: string, hue: number, saturation: number }
+    | { type:"cycleColor", id: string }
+
+export type TaskStatus = "active" | "error" | "stopped";
+
+// Recurring task 
+export interface ScheduledTask {
+    id: string;
+    lightId: string;
+    description: string;
+    intervalMs: number;
+    action: TaskAction;
+    status: TaskStatus;
+    runCount: number;
+    lastRun?: Date;
+    lastError?: string;
 }
