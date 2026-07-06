@@ -7,8 +7,8 @@
 - `[x]` done  -  `[~]` in progress  -  `[ ]` not started
 
 ## Current status
-Scaffolding and dependencies are complete. `src/types.ts` and `src/config.ts` are done. Next up:
-`src/connector/mockConnector.ts` (the first `LightConnector` implementation).
+Scaffolding and dependencies are complete. `src/types.ts`, `src/config.ts`, and
+`src/connector/mockConnector.ts` are done. Next up: `src/scheduler.ts` (the recurring-task loop engine).
 
 ## Build checklist (in build order)
 - [x] Project scaffolding - `package.json` (type: module, scripts), `tsconfig.json`, `.gitignore`, `.env` / `.env.example`
@@ -18,7 +18,7 @@ Scaffolding and dependencies are complete. `src/types.ts` and `src/config.ts` ar
 - [x] Source skeleton - all `src/**/*.ts` created with TODO headers
 - [x] `src/types.ts` - `Power`, `LightState`, `DeviceInfo`, `LightConnector`, `TaskAction`, `TaskStatus`, `ScheduledTask`
 - [x] `src/config.ts` - env + `loadLights()` / `saveLights()`
-- [ ] `src/connector/mockConnector.ts` - in-memory connector
+- [x] `src/connector/mockConnector.ts` - in-memory connector
 - [ ] `src/scheduler.ts` - TaskScheduler loop engine
 - [ ] `src/agent/tools.ts` - Anthropic tool schemas
 - [ ] `src/agent/systemPrompt.ts` - `buildSystemPrompt()`
@@ -40,6 +40,9 @@ Scaffolding and dependencies are complete. `src/types.ts` and `src/config.ts` ar
 ## Changelog
 Newest first. Note what changed and, once pushed, the commit.
 
+### 2026-07-06
+- Implemented `src/connector/mockConnector.ts`: `MockConnector implements LightConnector`, backed by an in-memory `Map<string, LightState>` seeded from the device registry (logs actions; unknown id throws).
+
 ### 2026-07-04
 - Pinned TypeScript to 5.9.3 (was 6.0.3) so CLI `tsc` resolves `@types/node`; aligns typecheck with the editor and the root project.
 - Implemented `src/config.ts`: `.env` loading via `process.loadEnvFile()`, `ANTHROPIC_API_KEY` / `CLAUDE_MODEL` / `CONNECTOR` exports, and `loadLights()` / `saveLights()` for `lights.json` (fixed a missing `join` import).
@@ -59,3 +62,5 @@ Track git pushes here so contributors can map docs to commits.
 | Date | Commit | Branch | Summary |
 |------|--------|--------|---------|
 | 2026-07-04 | a673f49 | main | Initial commit: full project scaffolding + `src/` |
+| 2026-07-04 | 252ad63 | main | Add README.md |
+| 2026-07-04 | a1f16e9 | main | Add config module + complete type contracts |
