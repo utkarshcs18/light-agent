@@ -42,6 +42,15 @@ the Kasa path is implemented but not yet tested against real hardware. Live agen
 ## Changelog
 Newest first. Note what changed and, once pushed, the commit.
 
+### 2026-07-20 (later)
+- Verified the Kasa integration against the official `tplink-smarthome-api` docs and the installed
+  v5 source: `Client`, `startDiscovery`/`device-new`, `getDevice({host})`, `setPowerState`, and
+  `lighting.setLightState({on_off,hue,saturation,color_temp})` all match - no correctness changes needed.
+- Hardened discovery for real-world networks (`setup.ts`): added optional `KASA_DISCOVERY_SECONDS`
+  and `KASA_BROADCAST` env overrides (the broadcast override is the standard fix when discovery finds
+  nothing on a segmented subnet), and improved the "no bulbs found" guidance. Documented in
+  `.env.example` and PLAN §8/§10.
+
 ### 2026-07-20
 - Completed the end-to-end build. Implemented the seven remaining files:
   - `scheduler.ts`: `TaskScheduler` with `schedule/list/cancel/cancelAll`; each tick maps a

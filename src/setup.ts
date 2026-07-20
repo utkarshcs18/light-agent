@@ -14,7 +14,14 @@ import { saveLights } from "./config.js";
 const { Client } = tplink;
 import type { DeviceInfo } from "./types.js";
 
-const DISCOVERY_MS = 5000;
+// Discovery is configurable via env so it works on segmented networks:
+//   KASA_DISCOVERY_SECONDS - how long to scan (default 5s)
+//   KASA_BROADCAST         - UDP broadcast address; override when the default
+//                            255.255.255.255 doesn't reach your bulbs' subnet
+//                            (e.g. "192.168.1.255"). This is the usual fix when
+//                            discovery finds nothing.
+const DISCOVERY_MS = Math.max(1, Number(process.env.KASA_DISCOVERY_SECONDS) || 5) * 1000;
+const BROADCAST = process.env.KASA_BROADCAST?.trim() || undefined;
 
 /** Turn a bulb alias into a friendly, url-safe id, e.g. "Living Room Lamp" -> "living-room-lamp". */
 function slug(name: string): string {
@@ -29,9 +36,17 @@ async function main(): Promise<void> {
   const client = new Client();
   const found = new Map<string, DeviceInfo>();
 
-  console.log(`Discovering Kasa bulbs on your LAN for ${DISCOVERY_MS / 1000}s...`);
+  console.log(
+    `Discovering Kasa bulbs on your LAN for ${DISCOVERY_MS / 1000}s` +
+      (BROADCAST ? ` (broadcast ${BROADCAST})` : "") +
+      "..."
+  );
 
-  client.startDiscovery({ deviceTypes: ["bulb"], discoveryTimeout: DISCOVERY_MS });
+  client.startDiscovery({
+    deviceTypes: ["bulb"],
+    discoveryTimeout: DISCOVERY_MS,
+    ...(BROADCAST ? { broadcast: BROADCAST } : {}),
+  });
   client.on("device-new", (device) => {
     const alias = device.alias ?? device.host;
     const info: DeviceInfo = {
@@ -51,8 +66,13 @@ async function main(): Promise<void> {
   const bulbs = [...found.values()];
   if (bulbs.length === 0) {
     console.log(
-      "\nNo bulbs found. Make sure they are powered on, on the same WiFi, and onboarded via the Kasa app.\n" +
-        "(Kasa KL/LB bulbs are supported; Tapo bulbs are not.)"
+      "\nNo bulbs found. Check that they are:\n" +
+        "  - powered on and onboarded via the Kasa mobile app,\n" +
+        "  - on the same WiFi/subnet as this machine (not a guest network),\n" +
+        "  - Kasa KL/LB bulbs (Tapo bulbs use a different protocol and are NOT supported).\n" +
+        "If they are set up but still not found, your network may block the default broadcast.\n" +
+        "Find a bulb's IP in the Kasa app and retry with your subnet broadcast, e.g.:\n" +
+        "  KASA_BROADCAST=192.168.1.255 npm run setup"
     );
     process.exit(0);
   }
