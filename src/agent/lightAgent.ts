@@ -125,6 +125,7 @@ export async function dispatchTool(
           ? input.ids.map((item) => String(item))
           : [String(input.id ?? "")].filter((item) => item && item !== "undefined");
         if (!ids.length) return { content: "Which light?", isError: true };
+        if (power === "on") await comeHome(scheduler);
         for (const id of ids) {
           for (const task of scheduler.list()) {
             if (task.lightId !== id || task.status !== "active") continue;
@@ -148,6 +149,7 @@ export async function dispatchTool(
       case "set_brightness": {
         const id = String(input.id);
         const brightness = Number(input.brightness);
+        await comeHome(scheduler);
         await connector.setPower(id, "on");
         await connector.setBrightness(id, brightness);
         return { content: `OK - ${id} brightness set to ${brightness}.` };
@@ -157,6 +159,7 @@ export async function dispatchTool(
         const id = String(input.id);
         const hue = Number(input.hue);
         const saturation = Number(input.saturation);
+        await comeHome(scheduler);
         await connector.setPower(id, "on");
         await connector.setColor(id, hue, saturation);
         return { content: `OK - ${id} color set to hue ${hue}, saturation ${saturation}.` };
@@ -167,11 +170,12 @@ export async function dispatchTool(
           ? input.lightIds.map((item) => String(item))
           : [String(input.lightId ?? "")].filter((item) => item && item !== "undefined");
         if (!ids.length) return { content: "Which light should I loop?", isError: true };
+        await comeHome(scheduler);
         const intervalMs = intervalMsOf(input);
         for (const lightId of ids) {
           for (const task of scheduler.list()) {
             const sameLight = task.lightId === lightId && task.status === "active";
-            const replaced = task.action.type === "cycleColor" || task.description === AWAY_MARK;
+            const replaced = task.action.type === "cycleColor";
             if (sameLight && replaced) scheduler.cancel(task.id);
           }
           await scheduler.schedule({
@@ -185,11 +189,6 @@ export async function dispatchTool(
           input.intervalSeconds != null
             ? `${input.intervalSeconds} sec`
             : `${input.intervalMinutes} min`;
-        const stillAway = scheduler.list().some((task) => task.status === "active" && task.description === AWAY_MARK);
-        const presence = loadPresence();
-        if (presence.mode === "away" && !stillAway) {
-          savePresence({ mode: "home", since: new Date().toISOString(), scene: presence.scene });
-        }
         return {
           content: `Scheduled ${ids.join(", ")} every ${every}. Other color loops stay running.`,
         };
@@ -312,6 +311,7 @@ export async function dispatchTool(
         const known = await connector.listLights();
         const ids = input.id ? [String(input.id)] : known.map((light) => light.id);
         if (!ids.length) return { content: "No lights to color.", isError: true };
+        const returned = await comeHome(scheduler);
         let paused = 0;
         for (const id of ids) {
           for (const task of scheduler.list()) {
@@ -320,6 +320,8 @@ export async function dispatchTool(
               paused += 1;
             }
           }
+        }
+        for (const id of ids) {
           await connector.setPower(id, "on");
           await connector.setBrightness(id, look.brightness);
           await connector.setColor(id, look.hue, look.saturation);
@@ -334,8 +336,11 @@ export async function dispatchTool(
               : look.source === "timezone"
                 ? `I could not read a location, so I used ${look.place}. It is ${look.summary}.`
                 : `${look.place} is ${look.summary}.`;
-        const held = paused ? " I paused the color loops so the lamps stay on this sky." : "";
-        const speech = `${where} ${target} ${verb} ${look.swatch}.${held}`;
+        const held = [
+          returned ? "You're home again." : "",
+          paused ? "I paused the color loops so the lamps stay on this sky." : "",
+        ].filter(Boolean).join(" ");
+        const speech = `${where} ${target} ${verb} ${look.swatch}.${held ? " " + held : ""}`;
         return {
           content: speech,
           speech,
@@ -356,6 +361,18 @@ export async function dispatchTool(
     const msg = err instanceof Error ? err.message : String(err);
     return { content: `Error running ${name}: ${msg}`, isError: true };
   }
+}
+
+/** A later command means someone is here. Stop the away hold and show Home. */
+async function comeHome(scheduler: TaskScheduler): Promise<boolean> {
+  const presence = loadPresence();
+  for (const task of scheduler.list()) {
+    if (task.status === "active" && task.description === AWAY_MARK) scheduler.cancel(task.id);
+  }
+  await scheduler.idle();
+  if (presence.mode !== "away") return false;
+  savePresence({ mode: "home", since: new Date().toISOString(), scene: presence.scene });
+  return true;
 }
 
 /** Seconds win when both are present. Floor is one second so a loop cannot spin the process. */
