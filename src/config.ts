@@ -29,7 +29,7 @@ try {
 // settings 
 
 export const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-export const CLAUDE_MODEL = process.env.CLAUDE_MODEL || "claude-opus-4-1776";
+export const CLAUDE_MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-4-5";
 export const CONNECTOR : "mock" | "kasa" = process.env.LIGHT_CONNECTOR === "kasa" ? "kasa" : "mock";
 
 // path to lights.json
