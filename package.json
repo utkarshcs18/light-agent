@@ -2,16 +2,20 @@
   "name": "light-agent",
   "version": "1.0.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
-  "description": "AI agent that controls TP-Link Kasa WiFi bulbs via natural language, with a recurring-task loop engine",
+  "description": "Alexa+ lighting add-on. One spoken intention becomes a local loop that verifies the bulb.",
   "scripts": {
     "agent": "tsx src/index.ts",
     "setup": "tsx src/setup.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/scheduler.test.ts src/intent.test.ts src/weather.test.ts src/taskStore.test.ts src/presence.test.ts src/mcp/server.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
-    "tplink-smarthome-api": "^5.0.0"
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "tplink-smarthome-api": "^5.0.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",

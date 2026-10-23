@@ -81,15 +81,22 @@ export const tools: Anthropic.Tool[] = [
   {
     name: "schedule_recurring_task",
     description:
-      "Schedule a recurring action on a light that runs every N minutes until cancelled (e.g. 'cycle the kitchen color every 5 minutes', or 'dim the bedroom to 20 every hour'). Each run executes the action and verifies it. Use action.type 'cycleColor' for requests that ask to change/rotate/cycle colors over time.",
+      "Schedule a recurring action on a light that repeats until cancelled. Each run executes the action and verifies the bulb, with no model call. Use intervalSeconds for periods under a minute (every 5 seconds -> 5). Use action.type 'cycleColor' when the user asks to change, rotate, or cycle colors.",
     input_schema: {
       type: "object",
       properties: {
         lightId: { type: "string", description: "The friendly light id to act on." },
         intervalMinutes: {
           type: "number",
-          minimum: 0.1,
-          description: "How often to run, in minutes.",
+          minimum: 0.02,
+          description:
+            "How often to run, in minutes. For a period under a minute, prefer intervalSeconds.",
+        },
+        intervalSeconds: {
+          type: "number",
+          minimum: 1,
+          description:
+            "How often to run, in seconds. Use this for 'every 5 seconds' (value 5). Minimum 1.",
         },
         description: {
           type: "string",
@@ -121,7 +128,7 @@ export const tools: Anthropic.Tool[] = [
           required: ["type"],
         },
       },
-      required: ["lightId", "intervalMinutes", "description", "action"],
+      required: ["lightId", "description", "action"],
     },
   },
   {
@@ -139,6 +146,57 @@ export const tools: Anthropic.Tool[] = [
         taskId: { type: "string", description: "The id returned by schedule_recurring_task." },
       },
       required: ["taskId"],
+    },
+  },
+  {
+    name: "loop_status",
+    description:
+      "Return the latest verify / retry trace for recurring tasks (phases: apply, mismatch, retry, verified, failed). Omit taskId to read every loop. Use this when the user asks whether a loop checked the bulb.",
+    input_schema: {
+      type: "object",
+      properties: {
+        taskId: { type: "string", description: "Optional task id. Omit for every loop." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "simulate_miss",
+    description:
+      "Demo only, mock connector. Drop the next scheduled write for one light so verification fails once and the loop retries. Use when the user says to drop, skip, or miss the next write.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "The friendly light id, e.g. 'kitchen'." },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "match_weather",
+    description:
+      "Set a light's color from the current weather, or every light if id is omitted. Use when the user wants the bulbs to match, follow, or adapt to the weather. Optional place is a city.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Friendly light id. Omit to color every light." },
+        place: { type: "string", description: "City name. Omit to use the caller's coordinates or this machine's location." },
+        latitude: { type: "number", description: "Latitude from the browser. Omit when place is set." },
+        longitude: { type: "number", description: "Longitude from the browser. Omit when place is set." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "set_presence",
+    description:
+      "Remember who is home. away saves every bulb and keeps the lights off. home restores that room and stops the watch.",
+    input_schema: {
+      type: "object",
+      properties: {
+        mode: { type: "string", enum: ["home", "away"], description: "away when they leave. home when they return." },
+      },
+      required: ["mode"],
     },
   },
 ];

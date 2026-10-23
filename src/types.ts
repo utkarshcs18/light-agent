@@ -1,68 +1,71 @@
 /**
- * types.ts - shared contracts used across the whole app.
- * The LightConnector interface is the key seam: connectors (mock/kasa) implement it,
- * and the agent + scheduler depend only on it.
- *
- * TODO: define and export
- *   - type Power = "on" | "off"
- *   - interface LightState  { power; brightness?; hue?; saturation? }
- *   - interface DeviceInfo  { id; alias?; host; model?; mac? }
- *   - interface LightConnector { listLights, getState, setPower, setBrightness, setColor }
- *   - type TaskAction = setPower | setBrightness | setColor | cycleColor
- *   - type TaskStatus = "active" | "error" | "stopped"
- *   - interface ScheduledTask { id; lightId; description; intervalMs; action; status; runCount; lastRun?; lastError? }
- *
- * See CLAUDE.md for the architecture overview.
+ * Shared contracts. The agent and the scheduler talk to LightConnector only.
  */
 
-// Power state of light
 export type Power = "on" | "off";
 
-// State of light can be in 
 export interface LightState {
-    power: Power;
-    brightness?: number; //0-100
-    hue?: number; //0-360
-    saturation?: number; //0-100
+  power: Power;
+  /** 0–100 */
+  brightness?: number;
+  /** 0–360 */
+  hue?: number;
+  /** 0–100 */
+  saturation?: number;
 }
 
-// Device info (saved in lights.json)
+/** A named light. `host` is the LAN address Kasa needs. */
 export interface DeviceInfo {
-    id: string; // eg: "living-room-light"
-    alias?: string; // original name of the light
-    host?: string; // ip address of the light
-    model?: string; // model of the light
-    mac?: string; // mac address of the light
+  id: string;
+  alias?: string;
+  host?: string;
+  model?: string;
+  mac?: string;
 }
 
-// Connector interface (light must implement it)
 export interface LightConnector {
-    listLights(): Promise<DeviceInfo[]>;
-    getState(id: string): Promise<LightState>;
-    setPower(id: string, power: Power): Promise<void>;
-    setBrightness(id: string, brightness: number): Promise<void>;
-    setColor(id: string, hue: number, saturation: number): Promise<void>;
+  listLights(): Promise<DeviceInfo[]>;
+  getState(id: string): Promise<LightState>;
+  setPower(id: string, power: Power): Promise<void>;
+  setBrightness(id: string, brightness: number): Promise<void>;
+  setColor(id: string, hue: number, saturation: number): Promise<void>;
+  /** Demo only. The next scheduler apply on this light fails verification once. */
+  armMiss?(id: string): void;
+  /** Returns true once after armMiss, then clears. The scheduler skips that apply. */
+  consumeMiss?(id: string): boolean;
 }
 
-// --loop engine --
-
-export type TaskAction = 
-    | { type:"setPower", id: string, power: Power }
-    | { type:"setBrightness", id: string, brightness: number }
-    | { type:"setColor", id: string, hue: number, saturation: number }
-    | { type:"cycleColor", id: string }
+export type TaskAction =
+  | { type: "setPower"; id: string; power: Power }
+  | { type: "setBrightness"; id: string; brightness: number }
+  | { type: "setColor"; id: string; hue: number; saturation: number }
+  | { type: "cycleColor"; id: string };
 
 export type TaskStatus = "active" | "error" | "stopped";
 
-// Recurring task 
+/** One step of a tick, shared by loop_status and the Alexa+ trace cards. */
+export type LoopPhase = "apply" | "mismatch" | "retry" | "verified" | "failed";
+
+export interface LoopEvent {
+  taskId: string;
+  lightId: string;
+  phase: LoopPhase;
+  attempt: number;
+  intended?: Partial<LightState>;
+  at: string;
+  detail?: string;
+  /** Ticks never call a model. Present so the card can show that from the event itself. */
+  modelCall: false;
+}
+
 export interface ScheduledTask {
-    id: string;
-    lightId: string;
-    description: string;
-    intervalMs: number;
-    action: TaskAction;
-    status: TaskStatus;
-    runCount: number;
-    lastRun?: Date;
-    lastError?: string;
+  id: string;
+  lightId: string;
+  description: string;
+  intervalMs: number;
+  action: TaskAction;
+  status: TaskStatus;
+  runCount: number;
+  lastRun?: Date;
+  lastError?: string;
 }

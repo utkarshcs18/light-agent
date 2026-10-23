@@ -1,65 +1,63 @@
 /**
- * mockConnector.ts - in-memory LightConnector for building/testing without hardware.
- *
- * TODO:
- *   - class MockConnector implements LightConnector
- *   - Back it with a Map<string, LightState> seeded from the provided DeviceInfo[].
- *   - Each method logs what it does and mutates the in-memory state.
- *   - getState returns the stored state; unknown id -> throw.
- *
- * Import LightConnector/LightState/DeviceInfo from "../types.js".
+ * In-memory lights for the Alexa+ demo and tests.
+ * armMiss drops the next scheduler apply so a spoken line can show a retry.
  */
 
-import type { LightConnector, LightState, DeviceInfo, Power } from "../types.js";
+import type { DeviceInfo, LightConnector, LightState, Power } from "../types.js";
 
 export class MockConnector implements LightConnector {
-    private devices: DeviceInfo[];
-    private states = new Map<string, LightState>();
+  private devices: DeviceInfo[];
+  private states = new Map<string, LightState>();
+  private armed = new Set<string>();
 
-    constructor(devices: DeviceInfo[]) {
-        this.devices = devices;
-        // Give every device a default state
-        for (const device of devices) {
-            this.states.set(device.id, {
-                power:  "off",
-                brightness: 50,
-                hue: 0,
-                saturation: 0,
-            })
-        }
+  constructor(devices: DeviceInfo[]) {
+    this.devices = devices;
+    for (const device of devices) {
+      this.states.set(device.id, {
+        power: "off",
+        brightness: 50,
+        hue: 0,
+        saturation: 0,
+      });
     }
+  }
 
-    // Helper: fetch device state or throw error
-    private getOrThrow(id: string): LightState {
-        const state = this.states.get(id);
-        if (!state) throw new Error(`Unknown device: ${id}`);
-        return state;
-    }
+  private require(id: string): LightState {
+    const state = this.states.get(id);
+    if (!state) throw new Error(`Unknown light: ${id}`);
+    return state;
+  }
 
-    async listLights(): Promise<DeviceInfo[]> {
-        return this.devices;
-    }
+  async listLights(): Promise<DeviceInfo[]> {
+    return this.devices;
+  }
 
-    async getState(id: string): Promise<LightState> {
-        return this.getOrThrow(id);
-    }
+  async getState(id: string): Promise<LightState> {
+    return { ...this.require(id) };
+  }
 
-    async setPower(id: string, power: Power): Promise<void> {
-        const state = this.getOrThrow(id);
-        state.power = power;
-        console.log(`[Mock] Set power to ${power} for ${id}`);
-    }
+  async setPower(id: string, power: Power): Promise<void> {
+    this.require(id).power = power;
+  }
 
-    async setBrightness(id: string, brightness: number): Promise<void> {
-        const state = this.getOrThrow(id);
-        state.brightness = brightness;
-        console.log(`[Mock] Set brightness to ${brightness} for ${id}`);
-    }
+  async setBrightness(id: string, brightness: number): Promise<void> {
+    this.require(id).brightness = brightness;
+  }
 
-    async setColor(id: string, hue: number, saturation: number): Promise<void> {
-        const state = this.getOrThrow(id);
-        state.hue = hue;
-        state.saturation = saturation;
-        console.log(`[Mock] Set color to ${hue}, ${saturation} for ${id}`);
-    }
+  async setColor(id: string, hue: number, saturation: number): Promise<void> {
+    const state = this.require(id);
+    state.hue = hue;
+    state.saturation = saturation;
+  }
+
+  armMiss(id: string): void {
+    this.require(id);
+    this.armed.add(id);
+  }
+
+  consumeMiss(id: string): boolean {
+    if (!this.armed.has(id)) return false;
+    this.armed.delete(id);
+    return true;
+  }
 }

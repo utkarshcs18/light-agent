@@ -1,51 +1,31 @@
 /**
- * config.ts - environment + persisted light registry.
- *
- * TODO:
- *   - Load .env via process.loadEnvFile() (wrap in try/catch; Node 24 built-in).
- *   - Export: ANTHROPIC_API_KEY, CLAUDE_MODEL (default e.g. "claude-sonnet-4-5"),
- *     CONNECTOR ("mock" | "kasa" from process.env.LIGHT_CONNECTOR).
- *   - loadLights(): DeviceInfo[]  -> read ./lights.json (return [] if missing).
- *   - saveLights(lights): void    -> write ./lights.json (used by setup.ts).
- *   - Resolve the lights.json path relative to this file (import.meta.url + node:path).
- *
- * Imports use .js extensions (NodeNext), e.g. import type { DeviceInfo } from "./types.js".
+ * Environment and the named-bulb registry (lights.json).
+ * A missing .env is fine: the spoken demo compiles without an API key.
  */
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { DeviceInfo } from "./types.js";
 
-// load vars from .env  file into process.env
-
 try {
-    process.loadEnvFile();
-
+  process.loadEnvFile();
 } catch {
-    console.error("Error loading .env file");
+  // Optional. Open-ended sentences need ANTHROPIC_API_KEY; the demo phrases do not.
 }
-
-// settings 
 
 export const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 export const CLAUDE_MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-4-5";
-export const CONNECTOR : "mock" | "kasa" = process.env.LIGHT_CONNECTOR === "kasa" ? "kasa" : "mock";
+export const CONNECTOR: "mock" | "kasa" = process.env.LIGHT_CONNECTOR === "kasa" ? "kasa" : "mock";
+export const PORT = Number(process.env.PORT || 8787);
 
-// path to lights.json
-const thisDir = dirname(fileURLToPath(import.meta.url)); // .../light-agent/src
-const LIGHTS_FILE = join(thisDir, "..", "lights.json"); // .../light-agent/lights.json
-
-// read saved lights from file or return empty array
+const LIGHTS_FILE = join(dirname(fileURLToPath(import.meta.url)), "..", "lights.json");
 
 export function loadLights(): DeviceInfo[] {
-    if (!existsSync(LIGHTS_FILE)) return [];
-    const raw = readFileSync(LIGHTS_FILE, "utf-8");
-    return JSON.parse(raw) as DeviceInfo[];
+  if (!existsSync(LIGHTS_FILE)) return [];
+  return JSON.parse(readFileSync(LIGHTS_FILE, "utf-8")) as DeviceInfo[];
 }
 
-// save lights to file
-
 export function saveLights(lights: DeviceInfo[]): void {
-    writeFileSync(LIGHTS_FILE, JSON.stringify(lights, null, 2), "utf-8");
+  writeFileSync(LIGHTS_FILE, JSON.stringify(lights, null, 2), "utf-8");
 }

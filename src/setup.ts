@@ -7,12 +7,11 @@
 
 import * as readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-// CommonJS interop: import the default and destructure (see kasaConnector.ts for why).
 import tplink from "tplink-smarthome-api";
+import type { DeviceInfo } from "./types.js";
 import { saveLights } from "./config.js";
 
 const { Client } = tplink;
-import type { DeviceInfo } from "./types.js";
 
 // Discovery is configurable via env so it works on segmented networks:
 //   KASA_DISCOVERY_SECONDS - how long to scan (default 5s)

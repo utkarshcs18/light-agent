@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Alexa+ · Light Agent</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <p class="brand">Alexa+</p>
+        <h1>Light Agent</h1>
+      </div>
+      <p id="link" class="link">Connecting</p>
+    </header>
+
+    <main class="stage">
+      <section class="talk" aria-label="Talk to Alexa+">
+        <p class="thesis">Tell Alexa+ once.<br />A local loop proves the bulb obeyed.</p>
+        <button id="mic" class="orb" type="button" aria-label="Talk to Alexa+">
+          <span class="orb-ring"></span>
+          <span class="orb-core"></span>
+        </button>
+        <p class="hint">Tap the orb, or press Space. Tap a lamp to watch only its checks.</p>
+        <p id="heard" class="heard">Ready when you are.</p>
+        <p id="reply" class="reply" aria-live="polite"></p>
+        <div class="chips">
+          <button type="button" data-utterance="Alexa, cycle the kitchen color every five seconds.">
+            Cycle the kitchen
+          </button>
+          <button type="button" data-utterance="Alexa, drop the next kitchen write.">
+            Drop the next write
+          </button>
+          <button type="button" data-utterance="Alexa, match the lights to the weather.">
+            Match the weather
+          </button>
+          <button type="button" data-utterance="Alexa, loop the lights.">Loop every light</button>
+          <button type="button" data-utterance="Alexa, turn the lights off.">Turn the lights off</button>
+          <button type="button" data-utterance="Alexa, what loops are running?">
+            What loops are running?
+          </button>
+          <button type="button" data-utterance="Alexa, I'm leaving.">I'm leaving</button>
+          <button type="button" data-utterance="Alexa, I'm back.">I'm back</button>
+        </div>
+        <form id="say-form" class="say">
+          <label class="sr" for="say">Type a request</label>
+          <input id="say" name="say" autocomplete="off" placeholder="Or type: make the desk blue" />
+          <button type="submit">Send</button>
+        </form>
+      </section>
+
+      <section class="board" aria-label="Lights and loop trace">
+        <p id="presence" class="presence is-home">Home<span>The room stays until you leave.</span></p>
+        <p id="situation" class="situation">The cards follow the last color each bulb confirmed.</p>
+        <section class="proof" aria-label="Closed loop">
+          <p id="proof-customer">Homes whose Alexa routine never checks the bulb.</p>
+          <dl>
+            <div>
+              <dt id="proof-checks">0</dt>
+              <dd>verified checks kept</dd>
+            </div>
+            <div>
+              <dt id="proof-models">0</dt>
+              <dd>model calls on those checks</dd>
+            </div>
+            <div>
+              <dt id="proof-tries">3</dt>
+              <dd>tries, 200ms then 400ms</dd>
+            </div>
+            <div>
+              <dt id="proof-loops">0</dt>
+              <dd>loops remembered in this agent</dd>
+            </div>
+          </dl>
+        </section>
+        <div id="lights" class="lights"></div>
+        <div id="trace" class="trace" aria-label="Verify traces, one lane per light">
+          <div class="trace-head">
+            <h2>Verify traces</h2>
+            <p class="trace-note">Each light keeps its own checks.</p>
+            <button type="button" class="show-all" hidden>Show every light</button>
+          </div>
+          <div class="lanes"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="protocol-bar" aria-label="MCP calls">
+      <p class="protocol-label">Streamable HTTP · 2025-11-25</p>
+      <div id="protocol" class="protocol"></div>
+    </footer>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

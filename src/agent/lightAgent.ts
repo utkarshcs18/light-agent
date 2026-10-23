@@ -1,9 +1,5 @@
 /**
- * lightAgent.ts - the brain: a Claude tool-use loop.
- *
- * LightAgent.run(userInput) sends the user's text plus the tool schemas to Claude, then loops:
- * while Claude wants a tool, dispatchTool routes it to the connector or the scheduler, feeds the
- * result back, and continues until Claude returns final text.
+ * One-shot compiler. A sentence becomes tool calls. Ticks never enter this loop.
  */
 
 import type Anthropic from "@anthropic-ai/sdk";
@@ -11,6 +7,8 @@ import type { DeviceInfo, LightConnector, Power, TaskAction } from "../types.js"
 import type { TaskScheduler } from "../scheduler.js";
 import { tools } from "./tools.js";
 import { buildSystemPrompt } from "./systemPrompt.js";
+import { currentWeather } from "../weather.js";
+import { AWAY_EVERY_MS, AWAY_MARK, loadPresence, savePresence, type PresenceSceneLight } from "../presence.js";
 
 const MAX_TOKENS = 1024;
 // Safety valve so a misbehaving loop can't spin forever.
@@ -84,6 +82,15 @@ function textOf(content: Anthropic.ContentBlock[]): string {
 interface ToolOutput {
   content: string;
   isError?: boolean;
+  /** Spoken line when it depends on the tool result, such as the live sky. */
+  speech?: string;
+  sky?: {
+    place: string;
+    summary: string;
+    swatch: string;
+    hue: number;
+    source: "browser" | "network" | "city" | "timezone";
+  };
 }
 
 /**
@@ -114,8 +121,28 @@ export async function dispatchTool(
 
       case "set_power": {
         const power = input.power as Power;
-        await connector.setPower(String(input.id), power);
-        return { content: `OK - ${input.id} turned ${power}.` };
+        const ids = Array.isArray(input.ids) && input.ids.length
+          ? input.ids.map((item) => String(item))
+          : [String(input.id ?? "")].filter((item) => item && item !== "undefined");
+        if (!ids.length) return { content: "Which light?", isError: true };
+        for (const id of ids) {
+          for (const task of scheduler.list()) {
+            if (task.lightId !== id || task.status !== "active") continue;
+            const forcesOff = task.action.type === "setPower" && task.action.power === "off";
+            if (power === "off" || forcesOff) scheduler.cancel(task.id);
+          }
+        }
+        await scheduler.idle();
+        for (const id of ids) {
+          await connector.setPower(id, power);
+          if (power !== "on") continue;
+          const state = await connector.getState(id);
+          const dim = (state.brightness ?? 0) < 35;
+          const uncolored = (state.saturation ?? 0) < 8;
+          if (dim) await connector.setBrightness(id, 78);
+          if (uncolored) await connector.setColor(id, 38, 72);
+        }
+        return { content: `${ids.join(", ")} turned ${power}.` };
       }
 
       case "set_brightness": {
@@ -136,13 +163,35 @@ export async function dispatchTool(
       }
 
       case "schedule_recurring_task": {
-        const lightId = String(input.lightId);
-        const intervalMs = Math.round(Number(input.intervalMinutes) * 60_000);
-        const description = String(input.description);
-        const action = toTaskAction(lightId, input.action);
-        const id = scheduler.schedule({ lightId, description, intervalMs, action });
+        const ids = Array.isArray(input.lightIds) && input.lightIds.length
+          ? input.lightIds.map((item) => String(item))
+          : [String(input.lightId ?? "")].filter((item) => item && item !== "undefined");
+        if (!ids.length) return { content: "Which light should I loop?", isError: true };
+        const intervalMs = intervalMsOf(input);
+        for (const lightId of ids) {
+          for (const task of scheduler.list()) {
+            const sameLight = task.lightId === lightId && task.status === "active";
+            const replaced = task.action.type === "cycleColor" || task.description === AWAY_MARK;
+            if (sameLight && replaced) scheduler.cancel(task.id);
+          }
+          await scheduler.schedule({
+            lightId,
+            description: `cycle ${lightId} color`,
+            intervalMs,
+            action: toTaskAction(lightId, input.action),
+          });
+        }
+        const every =
+          input.intervalSeconds != null
+            ? `${input.intervalSeconds} sec`
+            : `${input.intervalMinutes} min`;
+        const stillAway = scheduler.list().some((task) => task.status === "active" && task.description === AWAY_MARK);
+        const presence = loadPresence();
+        if (presence.mode === "away" && !stillAway) {
+          savePresence({ mode: "home", since: new Date().toISOString(), scene: presence.scene });
+        }
         return {
-          content: `Scheduled task ${id}: "${description}" every ${input.intervalMinutes} min.`,
+          content: `Scheduled ${ids.join(", ")} every ${every}. Other color loops stay running.`,
         };
       }
 
@@ -161,11 +210,142 @@ export async function dispatchTool(
       }
 
       case "cancel_scheduled_task": {
-        const taskId = String(input.taskId);
-        const ok = scheduler.cancel(taskId);
+        const ids = Array.isArray(input.taskIds) && input.taskIds.length
+          ? input.taskIds.map((item) => String(item))
+          : [String(input.taskId ?? "")].filter((item) => item && item !== "undefined");
+        if (!ids.length) return { content: "Which loop?", isError: true };
+        const cancelled = ids.filter((id) => scheduler.cancel(id));
         return {
-          content: ok ? `Cancelled task ${taskId}.` : `No task with id ${taskId}.`,
-          isError: !ok,
+          content: cancelled.length ? `Cancelled ${cancelled.join(", ")}.` : "No matching loop.",
+          isError: cancelled.length === 0,
+        };
+      }
+
+      case "loop_status": {
+        const taskId = input.taskId ? String(input.taskId) : undefined;
+        return {
+          content: JSON.stringify({
+            tasks: scheduler.list(),
+            events: scheduler.recentEvents(taskId),
+          }),
+        };
+      }
+
+      case "simulate_miss": {
+        const id = String(input.id);
+        if (typeof connector.armMiss !== "function") {
+          return {
+            content: "This connector cannot drop a write. Switch to LIGHT_CONNECTOR=mock for the miss demo.",
+            isError: true,
+          };
+        }
+        connector.armMiss(id);
+        return {
+          content: `Armed a one-time miss for ${id}. The next loop apply will fail verification once, then retry.`,
+        };
+      }
+
+      case "set_presence": {
+        const mode = String(input.mode) === "home" ? "home" : "away";
+        if (mode === "away") {
+          const known = await connector.listLights();
+          const scene: PresenceSceneLight[] = [];
+          for (const light of known) {
+            const state = await connector.getState(light.id);
+            scene.push({
+              id: light.id,
+              power: state.power,
+              brightness: state.brightness,
+              hue: state.hue,
+              saturation: state.saturation,
+            });
+          }
+          savePresence({ mode: "away", since: new Date().toISOString(), scene });
+          for (const task of scheduler.list()) {
+            if (task.status === "active") scheduler.cancel(task.id);
+          }
+          for (const light of scene) {
+            await scheduler.schedule({
+              lightId: light.id,
+              description: AWAY_MARK,
+              intervalMs: AWAY_EVERY_MS,
+              action: { type: "setPower", id: light.id, power: "off" },
+            });
+          }
+          const speech = "You're away. I saved the room, and I'll turn the lights back off if they come on.";
+          return { content: speech, speech };
+        }
+
+        const saved = loadPresence();
+        for (const task of scheduler.list()) {
+          if (task.description === AWAY_MARK) scheduler.cancel(task.id);
+        }
+        await scheduler.idle();
+        if (!saved.scene.length) {
+          savePresence({ mode: "home", since: new Date().toISOString(), scene: [] });
+          return {
+            content: "I don't have a saved room yet. Say you're leaving first.",
+            speech: "I don't have a saved room yet. Say you're leaving first.",
+            isError: true,
+          };
+        }
+        for (const light of saved.scene) {
+          await connector.setPower(light.id, light.power);
+          if (light.power === "on" && light.brightness != null) {
+            await connector.setBrightness(light.id, light.brightness);
+          }
+          if (light.power === "on" && light.hue != null && light.saturation != null) {
+            await connector.setColor(light.id, light.hue, light.saturation);
+          }
+        }
+        savePresence({ mode: "home", since: new Date().toISOString(), scene: saved.scene });
+        const speech = "Welcome back. The room is as you left it.";
+        return { content: speech, speech };
+      }
+
+      case "match_weather": {
+        const look = await currentWeather({
+          place: input.place ? String(input.place) : undefined,
+          latitude: finite(input.latitude),
+          longitude: finite(input.longitude),
+        });
+        const known = await connector.listLights();
+        const ids = input.id ? [String(input.id)] : known.map((light) => light.id);
+        if (!ids.length) return { content: "No lights to color.", isError: true };
+        let paused = 0;
+        for (const id of ids) {
+          for (const task of scheduler.list()) {
+            if (task.lightId === id && task.status === "active" && task.action.type === "cycleColor") {
+              scheduler.cancel(task.id);
+              paused += 1;
+            }
+          }
+          await connector.setPower(id, "on");
+          await connector.setBrightness(id, look.brightness);
+          await connector.setColor(id, look.hue, look.saturation);
+        }
+        const target = input.id ? String(input.id) : "The lights";
+        const verb = input.id ? "is" : "are";
+        const where =
+          look.source === "browser"
+            ? `${look.place} is ${look.summary}, from this browser's location.`
+            : look.source === "network"
+              ? `${look.place} is ${look.summary}. That city is this network's location, because the browser did not share one.`
+              : look.source === "timezone"
+                ? `I could not read a location, so I used ${look.place}. It is ${look.summary}.`
+                : `${look.place} is ${look.summary}.`;
+        const held = paused ? " I paused the color loops so the lamps stay on this sky." : "";
+        const speech = `${where} ${target} ${verb} ${look.swatch}.${held}`;
+        return {
+          content: speech,
+          speech,
+          sky: {
+            place: look.place,
+            summary: look.summary,
+            swatch: look.swatch,
+            hue: look.hue,
+            source: look.source,
+          },
         };
       }
 
@@ -176,6 +356,24 @@ export async function dispatchTool(
     const msg = err instanceof Error ? err.message : String(err);
     return { content: `Error running ${name}: ${msg}`, isError: true };
   }
+}
+
+/** Seconds win when both are present. Floor is one second so a loop cannot spin the process. */
+function finite(value: unknown): number | undefined {
+  if (value == null || value === "") return undefined;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function intervalMsOf(input: Record<string, unknown>): number {
+  const seconds =
+    input.intervalSeconds != null && input.intervalSeconds !== ""
+      ? Number(input.intervalSeconds)
+      : Number(input.intervalMinutes) * 60;
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    throw new Error("Provide intervalSeconds or intervalMinutes");
+  }
+  return Math.max(1000, Math.round(seconds * 1000));
 }
 
 /** Validate + narrow Claude's loosely-typed action object into a TaskAction. */

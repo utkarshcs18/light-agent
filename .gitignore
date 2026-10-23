@@ -2,3 +2,5 @@ node_modules/
 dist/
 .env
 lights.json
+tasks.json
+presence.json
